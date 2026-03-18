@@ -71,6 +71,12 @@ streamlit run ui.py
 
 - Open your browser and navigate to `http://localhost:8501`
 
+### Troubleshooting LLM startup and refine-query errors
+
+- If Robin reports an authentication error, confirm the matching provider key is set in your `.env` file or shell before starting Streamlit, then restart the app.
+- If Robin reports a `429`, `insufficient_quota`, or billing-related error, the key may be valid but out of credits or not enabled for the selected model. Add quota/billing or switch to another configured provider/model from the sidebar.
+- Use the sidebar **Check LLM Connection** button to verify the currently selected model can be reached before running a full investigation.
+
 ---
 
 ## Contributing

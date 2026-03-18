@@ -21,20 +21,74 @@ from health import check_llm_health, check_search_engines, check_tor_proxy
 def _render_pipeline_error(stage: str, err: Exception) -> None:
     message = str(err).strip() or err.__class__.__name__
     lower_msg = message.lower()
-    hints = [
-        "- Confirm the relevant API key is set in your `.env` or shell before launching Streamlit.",
-        "- Keys copied from dashboards often include hidden spaces; re-copy if authentication keeps failing.",
-        "- Restart the app after updating environment variables so the new values are picked up.",
-    ]
 
-    if any(token in lower_msg for token in ("anthropic", "x-api-key", "invalid api key", "authentication")):
-        hints.insert(0, "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.")
-    elif "openrouter" in lower_msg:
-        hints.insert(0, "- OpenRouter models require `OPENROUTER_API_KEY` and a reachable OpenRouter endpoint.")
-    elif "openai" in lower_msg or "gpt" in lower_msg:
-        hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
-    elif "google" in lower_msg or "gemini" in lower_msg:
-        hints.insert(0, "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.")
+    provider_hints = {
+        "anthropic": "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.",
+        "openrouter": "- OpenRouter models require `OPENROUTER_API_KEY` and a reachable OpenRouter endpoint.",
+        "openai": "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.",
+        "google": "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.",
+    }
+
+    provider = None
+    if "openrouter" in lower_msg:
+        provider = "openrouter"
+    elif any(token in lower_msg for token in ("google", "gemini")):
+        provider = "google"
+    elif any(token in lower_msg for token in ("anthropic", "x-api-key", "claude")):
+        provider = "anthropic"
+    elif any(token in lower_msg for token in ("openai", "gpt")):
+        provider = "openai"
+
+    quota_error = any(
+        token in lower_msg
+        for token in (
+            "insufficient_quota",
+            "quota",
+            "rate limit",
+            "ratelimit",
+            "429",
+            "billing",
+            "credit balance",
+        )
+    )
+    auth_error = any(
+        token in lower_msg
+        for token in (
+            "authentication",
+            "unauthorized",
+            "invalid api key",
+            "incorrect api key",
+            "api key",
+            "x-api-key",
+            "permission denied",
+            "forbidden",
+            "401",
+            "403",
+        )
+    ) and not quota_error
+
+    hints = []
+    if provider:
+        hints.append(provider_hints[provider])
+
+    if quota_error:
+        hints.extend([
+            "- This looks like a quota, billing, or rate-limit issue rather than a missing API key.",
+            "- Verify the selected model is enabled for your account and that your provider still has available credits/quota.",
+            "- If the problem persists, switch to another configured provider/model from the sidebar and retry.",
+        ])
+    elif auth_error:
+        hints.extend([
+            "- Confirm the relevant API key is set in your `.env` or shell before launching Streamlit.",
+            "- Keys copied from dashboards often include hidden spaces; re-copy if authentication keeps failing.",
+            "- Restart the app after updating environment variables so the new values are picked up.",
+        ])
+    else:
+        hints.extend([
+            "- Check the provider status and model availability, then retry the request.",
+            "- Use the sidebar health check to confirm the selected LLM can be reached from this environment.",
+            "- If needed, switch to another configured provider/model and retry.",
+        ])
 
     st.error(
         "❌ Failed to {}.\n\nError: {}\n\n{}".format(
@@ -44,6 +98,7 @@ def _render_pipeline_error(stage: str, err: Exception) -> None:
         )
     )
     st.stop()
+
 
 
 # Cache expensive backend calls

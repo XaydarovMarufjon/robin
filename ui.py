@@ -91,10 +91,10 @@ st.markdown(
 
 
 # Sidebar
-st.sidebar.title("Robin")
+st.sidebar.title("Darknet")
 st.sidebar.text("AI-Powered Dark Web OSINT Tool")
 st.sidebar.markdown(
-    """Made by [Apurv Singh Gautam](https://www.linkedin.com/in/apurvsinghgautam/)"""
+    """Made by [CSEC](https://www.csec.uz)"""
 )
 st.sidebar.subheader("Settings")
 def _env_is_set(value) -> bool:
@@ -236,7 +236,7 @@ if st.sidebar.button("🔍 Check Search Engines", use_container_width=True):
 # Main UI - logo and input
 _, logo_col, _ = st.columns(3)
 with logo_col:
-    st.image(".github/assets/robin_logo.png", width=200)
+    st.image("./images/csec.png", width=200)
 
 # Display text box and button
 with st.form("search_form", clear_on_submit=True):

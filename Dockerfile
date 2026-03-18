@@ -1,12 +1,12 @@
-FROM python:3.10-slim AS builder
+FROM python:3.11-slim AS builder
 
 RUN DEBIAN_FRONTEND="noninteractive" apt-get update && \
     apt-get install -y --no-install-recommends \
-      tor \
-      build-essential \
-      curl \
-      libssl-dev \
-      libffi-dev && \
+    tor \
+    build-essential \
+    curl \
+    libssl-dev \
+    libffi-dev && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

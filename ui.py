@@ -21,20 +21,73 @@ from health import check_llm_health, check_search_engines, check_tor_proxy
 def _render_pipeline_error(stage: str, err: Exception) -> None:
     message = str(err).strip() or err.__class__.__name__
     lower_msg = message.lower()
-    hints = [
-        "- Confirm the relevant API key is set in your `.env` or shell before launching Streamlit.",
-        "- Keys copied from dashboards often include hidden spaces; re-copy if authentication keeps failing.",
-        "- Restart the app after updating environment variables so the new values are picked up.",
-    ]
+    provider_hints = {
+        "anthropic": "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.",
+        "openrouter": "- OpenRouter models require `OPENROUTER_API_KEY` and a reachable OpenRouter endpoint.",
+        "openai": "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.",
+        "google": "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.",
+    }
 
-    if any(token in lower_msg for token in ("anthropic", "x-api-key", "invalid api key", "authentication")):
-        hints.insert(0, "- Claude/Anthropic models require a valid `ANTHROPIC_API_KEY`.")
-    elif "openrouter" in lower_msg:
-        hints.insert(0, "- OpenRouter models require `OPENROUTER_API_KEY` and a reachable OpenRouter endpoint.")
-    elif "openai" in lower_msg or "gpt" in lower_msg:
-        hints.insert(0, "- OpenAI models require `OPENAI_API_KEY` with access to the chosen model.")
-    elif "google" in lower_msg or "gemini" in lower_msg:
-        hints.insert(0, "- Google Gemini models need `GOOGLE_API_KEY` or Application Default Credentials.")
+    provider = None
+    if "openrouter" in lower_msg:
+        provider = "openrouter"
+    elif any(token in lower_msg for token in ("google", "gemini")):
+        provider = "google"
+    elif any(token in lower_msg for token in ("anthropic", "x-api-key", "claude")):
+        provider = "anthropic"
+    elif any(token in lower_msg for token in ("openai", "gpt")):
+        provider = "openai"
+
+    quota_error = any(
+        token in lower_msg
+        for token in (
+            "insufficient_quota",
+            "quota",
+            "rate limit",
+            "ratelimit",
+            "429",
+            "billing",
+            "credit balance",
+        )
+    )
+    auth_error = any(
+        token in lower_msg
+        for token in (
+            "authentication",
+            "unauthorized",
+            "invalid api key",
+            "incorrect api key",
+            "api key",
+            "x-api-key",
+            "permission denied",
+            "forbidden",
+            "401",
+            "403",
+        )
+    ) and not quota_error
+
+    hints = []
+    if provider:
+        hints.append(provider_hints[provider])
+
+    if quota_error:
+        hints.extend([
+            "- This looks like a quota, billing, or rate-limit issue rather than a missing API key.",
+            "- Verify the selected model is enabled for your account and that your provider still has available credits/quota.",
+            "- If the problem persists, switch to another configured provider/model from the sidebar and retry.",
+        ])
+    elif auth_error:
+        hints.extend([
+            "- Confirm the relevant API key is set in your `.env` or shell before launching Streamlit.",
+            "- Keys copied from dashboards often include hidden spaces; re-copy if authentication keeps failing.",
+            "- Restart the app after updating environment variables so the new values are picked up.",
+        ])
+    else:
+        hints.extend([
+            "- Check the provider status and model availability, then retry the request.",
+            "- Use the sidebar health check to confirm the selected LLM can be reached from this environment.",
+            "- If needed, switch to another configured provider/model and retry.",
+        ])
 
     st.error(
         "❌ Failed to {}.\n\nError: {}\n\n{}".format(
@@ -59,8 +112,9 @@ def cached_scrape_multiple(filtered: list, threads: int):
 
 # Streamlit page configuration
 st.set_page_config(
-    page_title="Robin: AI-Powered Dark Web OSINT Tool",
-    page_icon="🕵️‍♂️",
+    page_title="Dark Web OSINT Tool",
+    # page_icon="🕵️‍♂️",
+    page_icon="./images/csec.png",
     initial_sidebar_state="expanded",
 )
 
@@ -92,11 +146,11 @@ st.markdown(
 
 # Sidebar
 st.sidebar.title("Darknet")
-st.sidebar.text("AI-Powered Dark Web OSINT Tool")
+st.sidebar.text("Sun’iy intellektga asoslangan Dark Web OSINT vositasi")
 st.sidebar.markdown(
     """Made by [CSEC](https://www.csec.uz)"""
 )
-st.sidebar.subheader("Settings")
+st.sidebar.subheader("Sozlamalar")
 def _env_is_set(value) -> bool:
     return bool(value and str(value).strip() and "your_" not in str(value))
 
@@ -119,17 +173,17 @@ if not model_options:
     )
 
 model = st.sidebar.selectbox(
-    "Select LLM Model",
+    "LLM Model tanlang",
     model_options,
     index=default_model_index,
     key="model_select",
 )
 if any(name not in {"gpt4o", "gpt-4.1", "claude-3-5-sonnet-latest", "llama3.1", "gemini-2.5-flash"} for name in model_options):
-    st.sidebar.caption("Locally detected Ollama models are automatically added to this list.")
+    st.sidebar.caption("Local Ollama modelari ro‘yxatga avtomatik qo'shiladi.")
 threads = st.sidebar.slider("Scraping Threads", 1, 16, 4, key="thread_slider")
 
 st.sidebar.divider()
-st.sidebar.subheader("Provider Configuration")
+st.sidebar.subheader("Provayder sozlamalari")
 _providers = [
     ("OpenAI",      OPENAI_API_KEY,     True),
     ("Anthropic",   ANTHROPIC_API_KEY,  True),
@@ -140,13 +194,13 @@ _providers = [
 ]
 for name, value, is_cloud in _providers:
     if _env_is_set(value):
-        st.sidebar.markdown(f"&ensp;✅ **{name}** — configured")
+        st.sidebar.markdown(f"&ensp;✅ **{name}** — sozlandi")
     elif is_cloud:
-        st.sidebar.markdown(f"&ensp;⚠️ **{name}** — API key not set")
+        st.sidebar.markdown(f"&ensp;⚠️ **{name}** — API sozlanmagan")
     else:
-        st.sidebar.markdown(f"&ensp;🔵 **{name}** — not configured *(optional)*")
+        st.sidebar.markdown(f"&ensp;🔵 **{name}** — sozlanmadi *(optional)*")
 
-with st.sidebar.expander("⚙️ Prompt Settings"):
+with st.sidebar.expander("⚙️ Prompt sozlamalari"):
     preset_options = {
         "🔍 Dark Web Threat Intel": "threat_intel",
         "🦠 Ransomware / Malware Focus": "ransomware_malware",
@@ -181,10 +235,10 @@ with st.sidebar.expander("⚙️ Prompt Settings"):
 
 # --- Health Checks ---
 st.sidebar.divider()
-st.sidebar.subheader("Health Checks")
+st.sidebar.subheader("Ulanishlarni tekshirish")
 
 # LLM Health Check
-if st.sidebar.button("🔌 Check LLM Connection", use_container_width=True):
+if st.sidebar.button("🔌 LLM ulanishlari", use_container_width=True):
     with st.sidebar:
         with st.spinner(f"Testing {model}..."):
             result = check_llm_health(model)
@@ -198,7 +252,7 @@ if st.sidebar.button("🔌 Check LLM Connection", use_container_width=True):
             )
 
 # Search Engine Health Check
-if st.sidebar.button("🔍 Check Search Engines", use_container_width=True):
+if st.sidebar.button("🔍 Qidiruv tizimlarini tekshirish", use_container_width=True):
     with st.sidebar:
         with st.spinner("Checking Tor proxy..."):
             tor_result = check_tor_proxy()
@@ -243,11 +297,11 @@ with st.form("search_form", clear_on_submit=True):
     col_input, col_button = st.columns([10, 1])
     query = col_input.text_input(
         "Enter Dark Web Search Query",
-        placeholder="Enter Dark Web Search Query",
+        placeholder="Dark-veb qidiruv so‘rovini kiriting",
         label_visibility="collapsed",
         key="query_input",
     )
-    run_button = col_button.form_submit_button("Run")
+    run_button = col_button.form_submit_button("run")
 
 # Display a status message
 status_slot = st.empty()
@@ -274,7 +328,7 @@ if run_button and query:
 
     # Stage 2 - Refine query
     with status_slot.container():
-        with st.spinner("🔄 Refining query..."):
+        with st.spinner("🔄 So‘rov aniqlashtirilmoqda..."):
             try:
                 st.session_state.refined = refine_query(llm, query)
             except Exception as e:
